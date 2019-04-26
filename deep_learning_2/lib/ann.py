@@ -19,8 +19,6 @@ class ann:
 
     TODO: logistic output layer for binary classification when K=2
     TODO: measure training time
-
-    TODO: better initialisations of weights (scaling down by n_params)
     TODO: early stopping
     """
 
@@ -71,13 +69,14 @@ class ann:
         self.gW_adj = []
         self.gb_adj = []
         for i in range(self.n_layers - 1):
-            self.W.append(np.random.randn(self.layers_shape[i], self.layers_shape[i + 1]))  # / sqrt(self.n_param))
+            sd = np.sqrt(2 / (self.layers_shape[i] + (self.layers_shape[i+1] if self.activation is not 'relu' else 0)))
+            self.W.append(np.random.randn(self.layers_shape[i], self.layers_shape[i + 1]) / sd)
             self.gW.append(np.zeros((self.layers_shape[i], self.layers_shape[i + 1])))
             self.dW.append(np.zeros((self.layers_shape[i], self.layers_shape[i + 1])))
             self.cache_gW.append(np.ones((self.layers_shape[i], self.layers_shape[i + 1])))
             self.cache_gW2.append(np.ones((self.layers_shape[i], self.layers_shape[i + 1])))
             self.gW_adj.append(np.zeros((self.layers_shape[i], self.layers_shape[i + 1])))
-            self.b.append(np.random.randn(self.layers_shape[i + 1]))  # / sqrt(self.n_param))
+            self.b.append(np.random.randn(self.layers_shape[i + 1]))
             self.gb.append(np.zeros(self.layers_shape[i + 1]))
             self.db.append(np.zeros(self.layers_shape[i + 1]))
             self.cache_gb.append(np.ones(self.layers_shape[i + 1]))
