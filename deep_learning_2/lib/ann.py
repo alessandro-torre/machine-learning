@@ -10,14 +10,14 @@ from lib._ann_utils import OUTPUT_PREDICTIONS
 
 class ann:
     """
-    ANN with one hidden layer.
-    task={'classification', 'regression'}.
+    Artificial Neural Network for classification and regression tasks.
     Possible hidden activation functions: activation={'identity', 'sigmoid', 'tanh', 'relu'}.
     Cost function and output activation for classification: cross_entropy with softmax.
     Cost function and output activation for regression: squared_loss with identity.
-    The hidden layer can also have dimension zero (i.e. output layer only)
+    The network can also have no hidden layers (i.e. logistic regression).
 
-    TODO: logistic output layer for binary classification when K=2
+    TODO: logistic output layer & binary cross-entropy for binary classification
+    TODO: cross validation & grid search / random search
     TODO: measure training time
     TODO: early stopping
     """
