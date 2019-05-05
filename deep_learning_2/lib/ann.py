@@ -16,10 +16,16 @@ class ann:
     Cost function and output activation for regression: squared_loss with identity.
     The network can also have no hidden layers (i.e. logistic regression).
 
-    TODO: logistic output layer & binary cross-entropy for binary classification
+    TODO: add class ann_tf as wrapper to tensorflow
+    TODO: add METRICS to _ann_utils and use them here
+    TODO: dropout regularisation
+    TODO: noise injection
+    TODO: batch normalisation
+    TODO: Adam with Nesterov momentum (Nadam)
     TODO: cross validation & grid search / random search
     TODO: measure training time
     TODO: early stopping
+    TODO: logistic output layer & binary cross-entropy for binary classification
     """
 
     def __init__(self, n_features=1, classification_set=None, hidden_layers_shape=0, activation='sigmoid'):

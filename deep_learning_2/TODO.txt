@@ -1,0 +1,4 @@
+1. ann_tf based on tensor flow
+2. facial expression recognition project
+3. Try H20 with python
+4. Adam with Nesterov (https://medium.com/konvergen/modifying-adam-to-use-nesterov-accelerated-gradients-nesterov-accelerated-adaptive-moment-67154177e1fd)
