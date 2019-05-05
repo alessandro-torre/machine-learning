@@ -4,13 +4,8 @@ matplotlib.use('qt5agg')
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras import layers, optimizers
+from sklearn.model_selection import KFold
 
-"""
-TODO: add cross validation
-https://machinelearningmastery.com/evaluate-performance-deep-learning-models-keras/
-TODO: add grid search
-https://machinelearningmastery.com/grid-search-hyperparameters-deep-learning-models-python-keras/
-"""
 
 def ann_simple():
     model = tf.keras.Sequential([
@@ -37,23 +32,55 @@ def main_adaptive():
         'adam': optimizers.Adam(lr=0.01),  # or tf.train.AdamOptimizer
         'nadam': optimizers.Nadam(lr=0.01)}
     ann_set = {}
-    history = {}
+    result = {}
     for optimizer in optimizer_set:
         ann_set[optimizer] = ann_simple()
         ann_set[optimizer].compile(
             optimizer=optimizer_set[optimizer],
             loss='mse',
             metrics=['mae'])
-        history[optimizer] = ann_set[optimizer].fit(X, Y, epochs=100)
-        plt.plot(history[optimizer].history['loss'], label=optimizer)
+        print("Training model", optimizer, "...")
+        result[optimizer] = ann_set[optimizer].fit(
+            X, Y, validation_split=0.2,
+            epochs=100, batch_size=100, verbose=False)
+        plt.plot(result[optimizer].history['val_loss'], label=optimizer)
     plt.legend()
+    plt.title('Validation losses')
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
     plt.show()
 
 
 def main_crossval():
-    """ TODO: Try cross validation.
-https://machinelearningmastery.com/evaluate-performance-deep-learning-models-keras/
-    """
+    """ Test cross validation. """
+    X, Y = get_data()
+    # Define splitting function
+    kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
+    # Initialize model list and plots
+    model = []
+    ax_mse = plt.subplot(1, 2, 1, title='Validation mse', xlabel='epoch', ylabel='mse')
+    ax_mae = plt.subplot(1, 2, 2, title='Validation mae', xlabel='epoch', ylabel='mae')
+    # Cross-validation loop
+    for idx_train, idx_valid in kfold.split(X, Y):
+        model.append(ann_simple())
+        model[-1].compile(
+            optimizer=tf.train.AdamOptimizer(),
+            loss='mse',
+            metrics=['mae'])
+        print("Training model", len(model), "...")
+        model[-1].fit(
+            X[idx_train], Y[idx_train],
+            validation_data=(X[idx_valid], Y[idx_valid]),
+            epochs=20, batch_size=100, verbose=0)
+        val_mse = model[-1].history.history['val_loss']
+        val_mae = model[-1].history.history['val_mean_absolute_error']
+        print("    val_loss:", val_mse[-1])
+        print("    val_mae :", val_mae[-1])
+        ax_mse.plot(val_mse, label=len(model))
+        ax_mae.plot(val_mae, label=len(model))
+    ax_mse.legend(loc='upper right')
+    ax_mae.legend(loc='upper right')
+    plt.show()
 
 
 def main_gridsearch():
@@ -65,5 +92,4 @@ https://machinelearningmastery.com/grid-search-hyperparameters-deep-learning-mod
 if __name__ == '__main__':
     #main_adaptive()
     main_crossval()
-    #main_crossval()
     #main_gridsearch()
