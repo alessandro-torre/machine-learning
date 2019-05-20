@@ -8,7 +8,7 @@ from lib.ann import ann
 
 
 def get_data():
-    """ Generate 3D saddle and return number of features. """
+    """ Generate 3D saddle. """
     N = 1000
     X = np.random.random((N, 2)) * 4 - 2
     Y = X[:, 0] * X[:, 1]
