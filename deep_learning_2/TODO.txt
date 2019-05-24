@@ -1,3 +1,2 @@
-1. keras_fer.py
-2. h20_test.ipynb
-3. h20_fer.py
+1. cross validation & grid/random search in fer-keras.ipynb
+2. pytorch_test.ipynb

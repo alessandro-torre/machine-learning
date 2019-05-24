@@ -1,11 +1,12 @@
 import numpy as np
+import tensorflow as tf
 import matplotlib
 matplotlib.use('qt5agg')
 import matplotlib.pyplot as plt
-from lib.ann import ann
 
 
 def get_data(path, shuffle=True):
+    # images are 48x48 = 2304 size vectors
     X = []
     Y = []
     first = True
@@ -29,7 +30,7 @@ def show_im(X, Y):
     cls = ['Anger', 'Disgust', 'Fear', 'Happiness', 'Sadness', 'Surprise', 'Neutral']
     while True:
         for i in range(7):
-            x = X[Y == i, :]
+            x = X[Y == i]
             j = np.random.choice(len(x))
             n_pixel = int(np.sqrt(x.shape[1]))
             plt.imshow(x[j].reshape(n_pixel, n_pixel))
@@ -42,16 +43,20 @@ def show_im(X, Y):
 def main():
     print('importing fer data ...')
     X, Y = get_data('data/fer2013.csv', shuffle=True)
-    show_im(X, Y)
-    print('fitting ann ...')
-    ann1 = ann(n_features=X.shape[1], classification_set=set(Y), hidden_layers_shape=[50, 20], activation='tanh')
-    history1 = ann1.fit(X[:-1000], Y[:-1000], Xvalid=X[-1000:], Yvalid=Y[-1000:],
-                        learning_rate=0.1, momentum=0.90, adaptive_learning='constant',
-                        epochs=100, batch_size=500, verbose=True)
-    plt.plot(history1['loss'], label='loss')
-    plt.plot(history1['metric'], label='accuracy')
-    plt.plot(history1['loss_v'], label='validation loss')
-    plt.plot(history1['metric_v'], label='validation accuracy')
+    #show_im(X, Y)
+    print('fitting sequential model ...')
+    model = tf.keras.Sequential([
+        tf.keras.layers.Dense(200, activation=tf.keras.activations.relu),
+        tf.keras.layers.Dense(len(set(Y)), activation=tf.keras.activations.softmax)])
+    model.compile(optimizer=tf.keras.optimizers.RMSprop(lr=0.01),
+                  loss=tf.keras.losses.CategoricalCrossentropy(),
+                  metrics=[tf.keras.metrics.Accuracy()])
+    result = model.fit(X, Y, validation_split=0.2, batch_size=500, epochs=100,
+                       verbose=0)
+    plt.plot(result.history['loss'], label='loss')
+    plt.plot(result.history['accuracy'], label='accuracy')
+    plt.plot(result.history['val_loss'], label='validation loss')
+    plt.plot(result.history['val_accuracy'], label='validation accuracy')
     plt.legend()
     plt.show()
 
