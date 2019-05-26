@@ -2,3 +2,4 @@
 *.ipynb_checkpoints
 *.idea
 deep_learning_2/data/
+deep_learning_2/out/
