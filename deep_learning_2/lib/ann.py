@@ -4,24 +4,27 @@ from lib._ann_utils import HIDDEN_ACTIVATIONS
 from lib._ann_utils import OUTPUT_ACTIVATIONS
 from lib._ann_utils import HIDDEN_DERIVATIVES
 from lib._ann_utils import LOSS_FUNCTIONS
+from lib._ann_utils import METRICS
 from lib._ann_utils import REGULARIZATIONS
 from lib._ann_utils import OUTPUT_PREDICTIONS
 
 
-class ann:
+class ann(object):
     """
-    ANN with one hidden layer.
-    task={'classification', 'regression'}.
+    Artificial Neural Network for classification and regression tasks.
     Possible hidden activation functions: activation={'identity', 'sigmoid', 'tanh', 'relu'}.
     Cost function and output activation for classification: cross_entropy with softmax.
     Cost function and output activation for regression: squared_loss with identity.
-    The hidden layer can also have dimension zero (i.e. output layer only)
+    The network can also have no hidden layers (i.e. logistic regression).
 
-    TODO: logistic output layer for binary classification when K=2
+    TODO: dropout regularisation
+    TODO: noise injection
+    TODO: batch normalisation
+    TODO: Adam with Nesterov momentum (nadam) (https://medium.com/konvergen/modifying-adam-to-use-nesterov-accelerated-gradients-nesterov-accelerated-adaptive-moment-67154177e1fd)
+    TODO: cross validation & grid search / random search
     TODO: measure training time
-
-    TODO: better initialisations of weights (scaling down by n_params)
     TODO: early stopping
+    TODO: logistic output layer & binary cross-entropy for binary classification
     """
 
     def __init__(self, n_features=1, classification_set=None, hidden_layers_shape=0, activation='sigmoid'):
@@ -71,13 +74,14 @@ class ann:
         self.gW_adj = []
         self.gb_adj = []
         for i in range(self.n_layers - 1):
-            self.W.append(np.random.randn(self.layers_shape[i], self.layers_shape[i + 1]))  # / sqrt(self.n_param))
+            inv_sd = np.sqrt(2 / (self.layers_shape[i] + (self.layers_shape[i+1] if self.activation is not 'relu' else 0)))
+            self.W.append(np.random.randn(self.layers_shape[i], self.layers_shape[i + 1]) * inv_sd)
             self.gW.append(np.zeros((self.layers_shape[i], self.layers_shape[i + 1])))
             self.dW.append(np.zeros((self.layers_shape[i], self.layers_shape[i + 1])))
             self.cache_gW.append(np.ones((self.layers_shape[i], self.layers_shape[i + 1])))
             self.cache_gW2.append(np.ones((self.layers_shape[i], self.layers_shape[i + 1])))
             self.gW_adj.append(np.zeros((self.layers_shape[i], self.layers_shape[i + 1])))
-            self.b.append(np.random.randn(self.layers_shape[i + 1]))  # / sqrt(self.n_param))
+            self.b.append(np.random.randn(self.layers_shape[i + 1]))
             self.gb.append(np.zeros(self.layers_shape[i + 1]))
             self.db.append(np.zeros(self.layers_shape[i + 1]))
             self.cache_gb.append(np.ones(self.layers_shape[i + 1]))
@@ -92,7 +96,7 @@ class ann:
             assert set(Y).issubset(self.classification_set)
             N = len(Y)
             T = np.zeros((N, self.n_outputs))
-            T[range(N), map(self.cls2idx.get, Y)] = 1
+            T[range(N), list(map(self.cls2idx.get, Y))] = 1
             return T
 
     def _forward(self, X):
@@ -123,7 +127,7 @@ class ann:
         out = Z[-1]
         if out.shape[1] == 1:
             out = out.ravel()
-        # In case of classification, out is a pT and needs to be translated to Yhat
+        # In case of classification, out contains probabilities pT that must be translated to Yhat.
         pred = OUTPUT_PREDICTIONS[self.task](out, self.idx2cls)
         return pred
 
@@ -162,7 +166,7 @@ class ann:
     def dloss_db(self, dloss_dA):
         return dloss_dA.sum(axis=0)  # sum over N
 
-    def fit(self, X, Y, Xtest=None, Ytest=None, refit=False,
+    def fit(self, X, Y, Xvalid=None, Yvalid=None, refit=False,
             adaptive_learning='constant', learning_rate=0.01, beta1=0.90, beta2=0.99, epsilon=0.0001,
             reg_rate=0., epochs=5000, batch_size=None, momentum=0.90, nesterov=True,
             verbose=False, n_prints=100):
@@ -170,21 +174,21 @@ class ann:
         # Check for compatibility of input, output, and classification_set
         assert hasattr(X, 'shape') and hasattr(Y, 'shape')
         assert X.shape[0] == Y.shape[0]
-        if Xtest is not None and Ytest is not None:
+        if Xvalid is not None and Yvalid is not None:
             assert hasattr(X, 'shape') and hasattr(Y, 'shape')
-            assert Xtest.shape[1] == X.shape[1]
+            assert Xvalid.shape[1] == X.shape[1]
             assert X.shape[0] == Y.shape[0]
         else:
-            Xtest = Ytest = None
+            Xvalid = Yvalid = None
         assert self.n_features == X.shape[1]
         if self.task == 'classification':
             # For classification, target T is one-hot encoding of Y
             T = self._onehot(Y)
-            Ttest = self._onehot(Ytest) if (Ytest is not None) else None
+            Tvalid = self._onehot(Yvalid) if (Yvalid is not None) else None
         else:
             # For regression, Y.shape = (N, ). We reshape it to (N, 1) to prevent dimensionality issues in dloss_dAout.
             T = Y.reshape(-1, 1)
-            Ttest = Ytest.reshape(-1, 1) if (Ytest is not None) else None
+            Tvalid = Yvalid.reshape(-1, 1) if (Yvalid is not None) else None
         # Type checks
         assert isinstance(refit, bool)
         assert adaptive_learning in ['constant', 'adagrad', 'rmsprop', 'adam']
@@ -218,9 +222,9 @@ class ann:
         if refit:
             self._init_params()
         history_loss = np.empty(epochs)
-        history_acc = np.zeros(epochs)
-        history_loss_test = np.empty(epochs)
-        history_acc_test = np.zeros(epochs)
+        history_metric = np.zeros(epochs)
+        history_loss_v = np.empty(epochs)
+        history_metric_v = np.zeros(epochs)
         # Print message
         msg = "Training ANN with "
         if self.n_layers == 2:
@@ -271,12 +275,14 @@ class ann:
             # Use the updated weights
             Z = self._forward(X)
             history_loss[epoch] = LOSS_FUNCTIONS[self.task](Z[-1], T)  # + loss_reg
-            history_acc[epoch] = np.mean(OUTPUT_PREDICTIONS[self.task](Z[-1], self.idx2cls) == Y)
-            if Xtest is not None:
-                Ztest = self._forward(Xtest)
-                history_loss_test[epoch] = LOSS_FUNCTIONS[self.task](Ztest[-1], Ttest)  # + loss_reg
-                history_acc_test[epoch] = np.mean(OUTPUT_PREDICTIONS[self.task](Ztest[-1], self.idx2cls) == Ytest)
-            if verbose and (epoch == 0 or (epoch + 1) % int(float(epochs) / n_prints) == 0):
-                print(epoch + 1, " loss:", history_loss[epoch], "acc:", history_acc[epoch],
-                      "lr:", learning_rate)
-        return {'loss': history_loss, 'acc': history_acc, 'loss_v': history_loss_test, 'acc_v': history_acc_test}
+            history_metric[epoch] = METRICS[self.task](Z[-1], T)
+            msg = f"{epoch + 1} loss: {history_loss[epoch]:0.4f}, metric: {history_metric[epoch]:0.3f}"
+            if Xvalid is not None:
+                Zvalid = self._forward(Xvalid)
+                history_loss_v[epoch] = LOSS_FUNCTIONS[self.task](Zvalid[-1], Tvalid)  # + loss_reg
+                history_metric_v[epoch] = METRICS[self.task](Zvalid[-1], Tvalid)
+                msg = msg + f" ,loss_v: {history_loss_v[epoch]:0.4f}, metric_v: {history_metric_v[epoch]:0.3f}"
+            if verbose and (epoch == 0 or ((epoch + 1) % max(1, epochs // n_prints) == 0)):
+                print(msg)
+        return {'loss': history_loss, 'metric': history_metric,
+                'loss_v': history_loss_v, 'metric_v': history_metric_v}

@@ -46,19 +46,31 @@ HIDDEN_DERIVATIVES = {
 }
 
 # Loss functions to be minimized by the neural network.
-# cross_entropy for classification (with softmax output activation), squared loss for regression.
+# cross_entropy for classification (with softmax output activation), mean squared error for regression.
 # We do not include categorical_cross_entropy for binary classification (with sigmoid output activation),
 # as it can be covered by softmax with K=2.
 def cross_entropy(out, T):
 	pT = out
 	return -(T * np.log(pT)).mean()
-def squared_loss(out, T):
+def mean_squared_error(out, T):
 	Yhat = out
-	return 0.5 * ((Yhat - T)**2).mean()
+	Y = T
+	return 0.5 * ((Yhat - Y)**2).mean()
 # Dictionary for the loss functions. The task is the key.
 LOSS_FUNCTIONS = {
 	'classification': cross_entropy,
-	'regression': squared_loss
+	'regression': mean_squared_error
+}
+
+# Additional metrics to measure performance, other than the loss functions.
+def accuracy(out, T):
+	return np.mean(np.argmax(out, axis=1) == np.argmax(T, axis=1))
+def mean_average_error(out, T):
+	return np.mean(np.abs(out - T))
+# Dictionary for the loss functions. The task is the key.
+METRICS = {
+	'classification': accuracy,
+	'regression': mean_average_error
 }
 
 # L1 and L2 regularization functions and derivatives
@@ -87,8 +99,8 @@ def Yhat_to_Yhat(out, idx2cls=None):
 	return Yhat
 def pT_to_Yhat(out, idx2cls):
 	pT = out
-	keys = np.argmax(pT, axis=1)
-	Yhat = map(idx2cls.get, keys)
+	idx = np.argmax(pT, axis=1)
+	Yhat = list(map(idx2cls.get, idx))
 	return Yhat
 # Dictionary for doing predictions from the neural network output. The task is the key.
 OUTPUT_PREDICTIONS = {
