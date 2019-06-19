@@ -1,4 +1,4 @@
-1. Implement Naive Bayes with PCA and apply to MNIST data (lecture 15)
+1. Implement Naive Bayes with PCA and apply it to MNIST data (lecture 15)
 2. Implement SVC and apply it to a cube of gaussian clouds (lecture 18)
 3. Use SVC from scikit-learn and apply it to a donut (lecture 19), and to XOR (lecture 20)
 4. Apply SVC to MNIST (lecture 21)

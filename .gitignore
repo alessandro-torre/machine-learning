@@ -1,5 +1,12 @@
 *.pyc
+
 *.ipynb_checkpoints
+
 *.idea
+
+supervised/data/
+data/
+mnist
 supervised_deep_2/data/
+
 supervised_deep_2/out/
