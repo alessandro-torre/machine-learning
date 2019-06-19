@@ -8,7 +8,7 @@ if __name__ == '__main__':
     from util import get_data as get_mnist
     from util import score
 
-    X, Y = get_mnist('../data/train.csv', classes=np.array([5, 6]))  # import two classes
+    X, Y = get_mnist('../../large_data/mnist/train.csv', classes=np.array([5, 6]))  # import two classes
     Ntrain = len(Y) / 2
     Xtrain, Ytrain = X[:Ntrain], Y[:Ntrain]
     Xtest, Ytest = X[Ntrain:], Y[Ntrain:]

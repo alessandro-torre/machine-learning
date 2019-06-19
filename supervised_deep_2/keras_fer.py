@@ -42,7 +42,7 @@ def show_im(X, Y):
 
 def main():
     print('importing fer data ...')
-    X, Y = get_data('data/fer2013.csv', shuffle=True)
+    X, Y = get_data('../large_data/fer/fer2013.csv', shuffle=True)
     #show_im(X, Y)
     print('fitting sequential model ...')
     model = tf.keras.Sequential([

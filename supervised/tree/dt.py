@@ -129,7 +129,7 @@ if __name__ == '__main__':
     sys.path.append("../bayes")
     from simplified_bayes import BinaryGaussianBayes
 
-    X, Y = util.get_data('../data/train.csv', classes=np.array([5, 6]))  # import two classes
+    X, Y = util.get_data('../../large_data/mnist/train.csv', classes=np.array([5, 6]))  # import two classes
     Ntrain = len(Y) / 2
     Xtrain, Ytrain = X[:Ntrain], Y[:Ntrain]
     Xtest, Ytest = X[Ntrain:], Y[Ntrain:]

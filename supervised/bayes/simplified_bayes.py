@@ -70,7 +70,7 @@ if __name__ == '__main__':
     from bayes import Bayes
 
     N = 10000
-    X, Y = util.get_data('../data/train.csv', limit=N, classes=np.array([2, 5]), drop=True)  # import two classes
+    X, Y = util.get_data('../../large_data/mnist/train.csv', limit=N, classes=np.array([2, 5]), drop=True)  # import two classes
     N = len(Y)
     Ntrain = N / 2
     Xtrain, Ytrain = X[:Ntrain], Y[:Ntrain]

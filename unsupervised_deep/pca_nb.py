@@ -23,12 +23,12 @@ def pca(data, Q=None):
 
 
 def main():
-    
-    Xtrain, Ytrain, Xtest, Ytest = get_mnist_data(folder='../data/mnist/')
-    
+
+    Xtrain, Ytrain, Xtest, Ytest = get_mnist_data(folder='../large_data/mnist/')
+
     Ztrain, trainVar, Q = pca(Xtrain)
     Ztest, testVar = pca(Xtest, Q)
-    
+
     # Plot explained var and cumulative var
     plt.plot(trainVar)
     plt.title("Explained variance")
@@ -36,13 +36,13 @@ def main():
     plt.plot(np.cumsum(trainVar))
     plt.title("Cumulative variance")
     plt.show()
-    
+
     # Plot the first two dimensions
     plt.scatter(Ztrain[:,0], Ztrain[:,1], c=Ytrain)
-    
-    
+
+
     # TODO: naive bayes
-    
-    
+
+
 if __name__=='__main__':
     main()

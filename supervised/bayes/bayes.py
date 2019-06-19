@@ -52,7 +52,7 @@ if __name__ == '__main__':
     import datetime as dt
 
     N = 10000
-    X, Y = util.get_data('../data/train.csv', limit=N)
+    X, Y = util.get_data('../../large_data/mnist/train.csv', limit=N)
     N = len(Y)
     Ntrain = N / 2
     Xtrain, Ytrain = X[:Ntrain], Y[:Ntrain]

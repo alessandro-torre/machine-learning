@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     N = 10000
     Ntrain = N / 2
-    X, Y = util.get_data('../data/train.csv', limit=N)
+    X, Y = util.get_data('../../large_data/mnist/train.csv', limit=N)
     Xtrain, Ytrain = X[:Ntrain], Y[:Ntrain]
     Xtest, Ytest = X[Ntrain:], Y[Ntrain:]
 

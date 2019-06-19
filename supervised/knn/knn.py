@@ -47,7 +47,7 @@ if __name__ == '__main__':
     from datetime import datetime
     from matplotlib import pyplot as plt
 
-    X, Y = get_data('../data/train.csv', limit=1000)
+    X, Y = get_data('../../large_data/mnist/train.csv', limit=1000)
 
     # check one image
     n = 3

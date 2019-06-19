@@ -41,7 +41,7 @@ def show_im(X, Y):
 
 def main():
     print('importing fer data ...')
-    X, Y = get_data('data/fer2013.csv', shuffle=True)
+    X, Y = get_data('../large_data/fer/fer2013.csv', shuffle=True)
     show_im(X, Y)
     print('fitting ann ...')
     ann1 = ann(n_features=X.shape[1], classification_set=set(Y), hidden_layers_shape=[50, 20], activation='tanh')
