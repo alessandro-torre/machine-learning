@@ -67,7 +67,7 @@ def accuracy(out, T):
 	return np.mean(np.argmax(out, axis=1) == np.argmax(T, axis=1))
 def mean_average_error(out, T):
 	return np.mean(np.abs(out - T))
-# Dictionary for the loss functions. The task is the key.
+# Dictionary for the metrics. The task is the key.
 METRICS = {
 	'classification': accuracy,
 	'regression': mean_average_error
