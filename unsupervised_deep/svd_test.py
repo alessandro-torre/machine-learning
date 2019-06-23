@@ -17,8 +17,8 @@ def main():
     # Reduce the number of samples, just to test. Naive implementation of SVD too slow
     idx = random.randint(0, len(Ytrain))
     # TODO: use idx
-    Xtrain = Xtrain[:1000]
-    Ytrain = Ytrain[:1000]
+    #Xtrain = Xtrain[:1000]
+    #Ytrain = Ytrain[:1000]
 
     # Do SVD on train data. Keep 2 features and get transformed data.
     # Note: with SVD, you cannot reduce features after transforming.
