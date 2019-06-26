@@ -1,12 +1,6 @@
-import numpy as np
 import time
 import lib.util
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    import matplotlib
-    matplotlib.use('qt5agg')
-    import matplotlib.pyplot as plt
+import sklearn.decomposition
 
 
 def do_bayes(Xtrain, Ytrain, Xtest, Ytest):
@@ -28,31 +22,31 @@ def main():
 
     # Do PCA on train data, and apply the same to test data
     print('Doing PCA on train data..')
-    pca = lib.decomposition.PCA()
+    pca = sklearn.decomposition.PCA()
     t0 = time.time()
-    Ztrain = pca.train_and_transform(Xtrain)
+    Ztrain = pca.fit_transform(Xtrain)
     Ztest  = pca.transform(Xtest)
     print('Time to do PCA:', time.time()-t0)
 
     # Naive bayes with PCA
     n_features = 10
-    pca_var_n = pca.var[:n_features].sum() / pca.var.sum()
+    pca_var_n = pca.explained_variance_[:n_features].sum() / pca.explained_variance_.sum()
     print(f'The first {n_features} features of PCA ' +
           f'explain {(int)(round(pca_var_n*100))}% of variance.')
     print('Doing naive bayes classification on these features..')
     Ztrain_ = Ztrain[:,:n_features]
     Ztest_  = Ztest[:,:n_features]
-    do_bayes(Ztrain_ , Ytrain, Ztest_, Ytest)
+    do_bayes(Ztrain_, Ytrain, Ztest_, Ytest)
 
     # Naive bayes with PCA (keep more features)
     n_features = 50
-    pca_var_n = pca.var[:n_features].sum() / pca.var.sum()
+    pca_var_n = pca.explained_variance_[:n_features].sum() / pca.explained_variance_.sum()
     print(f'The first {n_features} features of PCA ' +
           f'explain {(int)(round(pca_var_n*100))}% of variance.')
     print('Doing naive bayes classification on these features..')
     Ztrain_ = Ztrain[:,:n_features]
     Ztest_  = Ztest[:,:n_features]
-    do_bayes(Ztrain_ , Ytrain, Ztest_, Ytest)
+    do_bayes(Ztrain_, Ytrain, Ztest_, Ytest)
 
 
 if __name__=='__main__':

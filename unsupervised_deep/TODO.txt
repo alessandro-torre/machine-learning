@@ -1,6 +1,6 @@
 1. DONE: Implement Naive Bayes with PCA and apply it to MNIST data (lecture 15)
 2. DONE: Implement SVD and use it with Naive Bayes on MNIST data
-3. Use sklearn's implementation of PCA and SVD on Naive Bayes.
+3. DONE: Use sklearn's implementation of PCA and SVD on Naive Bayes.
 4. Implement t-SNE and apply it to a cube of gaussian clouds (lecture 18)
 5. Use t-SNE from sklearn and apply it to a donut (lecture 19), and to XOR (lecture 20)
 6. Apply sklearn's t-SNE to MNIST (lecture 21)
