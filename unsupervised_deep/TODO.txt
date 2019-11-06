@@ -5,4 +5,6 @@
 5. Use t-SNE from sklearn and apply it to a donut (lecture 19), and to XOR (lecture 20)
 6. Apply sklearn's t-SNE to MNIST (lecture 21)
 
-7. Denoising autoencoder (lecture 23)
++ autoencoder class to use with TF 2.0 deep neural net (~lecture 28)
++ RBM class to use with TF 2.0 deep neural net (~lecture 44)
++ recommender with autoencoder in TF 2.0

@@ -25,7 +25,7 @@ SVD transforms X by reducing both U and V (and S as a consequence):
     X_ = Z_.dot(V_.T)  [reconstructed]
 X_ = Z_.dot(V_.T) is simply a map back to the initial space.
 
-Note that SVD seems to "removes more" by reducing U, but SVD and PCA actually
+Note that SVD seems to "remove more" by reducing U, but SVD and PCA actually
 return the same Z_. We can first show that the variance of Z_ is the same
 by using
     U.dot(U.T) = V.dot(V.T) = 1 (which hold for U_ and V_ as well)

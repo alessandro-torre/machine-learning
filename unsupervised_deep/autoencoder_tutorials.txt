@@ -1,0 +1,3 @@
+https://towardsdatascience.com/implementing-an-autoencoder-in-tensorflow-2-0-5e86126e9f7
+
+https://blog.keras.io/building-autoencoders-in-keras.html
