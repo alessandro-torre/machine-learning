@@ -5,3 +5,4 @@
 *.spyproject
 large_data/
 supervised_deep_2/out/
+unsupervised_deep/tb/
