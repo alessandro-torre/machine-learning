@@ -180,14 +180,14 @@ class Monkey(Player):
 class AI(Player):
     def __init__(self, env, alpha=0.5, eps=0.1):
         self.name = 'AI'
-        self.eps = eps
-        self.alpha = alpha
+        self.eps = min(1, max(0, eps))
+        self.alpha = min(1, max(0, alpha))
         self.history = []
         self.init_weights(env)
 
     def init_weights(self, env):
-        # Initialize states randomly between -0.5 and 0.5
-        self.V = np.random.random(env.n_states) - 0.5
+        # Initialize states randomly between -0.1 and 0.1
+        self.V = np.random.random(env.n_states) / 5. - 0.1
         # Initialize end state value to winning role (0 if draw)
         for state, winner in self.generate_endgames(env):
             self.V[state] = winner
@@ -240,9 +240,11 @@ class AI(Player):
             move = valid_moves[np.random.choice(len(valid_moves))]
         else:
             # Calculate the values of states for all valid moves (max 9 states)
-            values = np.array([self.V[self.get_state(env, board=env.simulate_move(move, role))] for move in valid_moves])
-            # If role==1 we want to maximize, otherwise to minimize
-            move = valid_moves[values.argmax() if role==1 else values.argmin()]
+            # We multiply by role, because if role==-1 we want to maximize -values.
+            values = role * np.array([
+                self.V[self.get_state(env, board=env.simulate_move(move, role))]
+                for move in valid_moves])
+            move = valid_moves[values.argmax()]
         # Make the move
         assert env.apply_move(move, role)
 
@@ -284,10 +286,15 @@ if __name__ == '__main__':
     mon = Monkey()
     ai = AI(env)  # the AI needs env to initialise proper weights
 
-    # Train AI by making it play multiple times against himself
-    env.train_AI(ai, n=10000)
-    # # Save weights to CSV/JSON for future use
-    # V = ai.get_weights()
+    try:
+        ai.set_weights(np.loadtxt('V_10000.out'), env)
+        print('AI weights restored from file.')
+    except IOError:
+        print('No weights file available, AI will be trained.')
+        # Train AI by making it play multiple times against himself
+        env.train_AI(ai, n=10000)
+        # Save weights to text file for future use
+        np.savetxt('V_10000.out', ai.get_weights())
 
     tournament = [
         (ai, mon),  # AI against Monkey
