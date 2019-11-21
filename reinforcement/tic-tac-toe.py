@@ -1,36 +1,34 @@
 import numpy as np
 
 class Environment:
-    def __init__(self):
-        self.LENGTH = 3
-        self.RANGE = range(self.LENGTH)
+    def __init__(self, length=3):
+        self.length = length
+        self.range = range(self.length)
+        self.roles = (1, -1)
+        self.symbol_map = {0:' ', 1:'x', -1:'o'}
+        self.n_states = len(self.symbol_map) ** (self.length * self.length)
         self.reset()
 
     def reset(self):
-        self.board = np.zeros((self.LENGTH, self.LENGTH))
+        self.board = np.zeros((self.length, self.length))
         self.winner = None
 
     def print(self):
-        print('    1   2   3')
-        for i in range(self.LENGTH):
-            print('  -------------')
+        print('    ', end='')
+        print(*[str(i + 1) for i in range(self.length)], sep = '   ')
+        for i in range(self.length):
+            print('  -' + self.length * '----')
             print(str(i + 1) + ' |', end='')
-            for j in range(self.LENGTH):
-                print(' ', end='')
-                if self.board[i,j] == 1:
-                    print('x |', end='')
-                elif self.board[i,j] == -1:
-                    print('o |', end='')
-                else:
-                    print('  |', end='')
+            for j in range(self.length):
+                print(' ' + self.symbol_map[self.board[i,j]] + ' |', end='')
             print('')
-        print('  -------------')
+        print('  -' + self.length * '----')
 
     # Get the list of empty cells
     def get_valid_moves(self):
         result = []
-        for i in self.RANGE:
-            for j in self.RANGE:
+        for i in self.range:
+            for j in self.range:
                 if self.board[i,j] == 0:
                     result.append((i, j))
         return result
@@ -39,7 +37,7 @@ class Environment:
     def apply_move(self, move, role):
         assert isinstance(move, tuple)
         i, j = move
-        if (i in self.RANGE and j in self.RANGE and self.board[i,j] == 0):
+        if (i in self.range and j in self.range and self.board[i,j] == 0):
             self.board[i,j] = role
             return True
         else:
@@ -50,7 +48,7 @@ class Environment:
     def simulate_move(self, move, role):
         assert isinstance(move, tuple)
         i, j = move
-        assert (i in self.RANGE and j in self.RANGE and self.board[i,j] == 0)
+        assert (i in self.range and j in self.range and self.board[i,j] == 0)
         board = self.board.copy()
         board[i,j] = role
         return board
@@ -60,10 +58,10 @@ class Environment:
         if np.all(self.board == 0):
             return False
         # Loop for each role
-        for role in (-1, 1):
-            three = role * self.LENGTH
+        for role in self.roles:
+            three = role * self.length
             # Check rows and cols
-            for i in self.RANGE:
+            for i in self.range:
                 if self.board[i,:].sum() == three \
                 or self.board[:,i].sum() == three:
                     self.winner = role
@@ -81,22 +79,22 @@ class Environment:
 
     # Start a game where players make moves in turns.
     # If learn is True, AI players update the weights based on the game history.
-    def play_game(self, player0, player1, learn=False):
+    # In this mode, we are not letting AI players learning from the game.
+    # We would need to add observe() after move().
+    def play_game(self, player1, player2, learn=False):
         self.reset()
-        assert isinstance(player0, Player) and isinstance(player1, Player)
-        players = (player0, player1)
-        roles = (1, -1)
-        symbols = ('x', 'o')
-        current_player = 0
+        assert isinstance(player1, Player) and isinstance(player2, Player)
+        players = dict(zip(self.roles, (player1, player2)))
         # Draw board
-        print(player0.name + ' against ' + player1.name)
+        print(player1.name + ' against ' + player2.name)
         self.print()
         # Continue until gameover
+        current_role = self.roles[0]  # =1
         while True:
             # Current player makes the move. Repeat until valid move
-            players[current_player].move(env=self, role=roles[current_player])
+            players[current_role].move(env=self, role=current_role)
             # Draw board
-            print(players[current_player].name + ' moves:')
+            print(players[current_role].name + ' moves:')
             self.print()
             # Check if gameover
             if self.is_gameover():
@@ -106,23 +104,24 @@ class Environment:
                 if self.winner == 0:
                     print('It\'s a draw!')
                 else:
-                    print('Player ' + players[current_player].name + ' (' \
-                        + symbols[current_player] + ') wins!')
+                    print('Player ' + players[self.winner].name + ' (' \
+                        + self.symbol_map[self.winner] + ') wins!')
                 break
             # Switch players
-            current_player = 1 - current_player
+            current_role *= -1
 
     # This functions facilitate training the AI, by making the same agent
-    # playing against itself.
+    # playing against itself multiple times.
     def train_AI(self, ai, n=10000):
         assert isinstance(ai, AI)
         # Train n times
+        print('Training progress:')
         for i in range(n):
             # Print simulation progress
-            if (i + 1) % (n // 100) == 0:
-                print("Training progress: " + str(100*(i+1)//n) + "%")
+            if (i + 1) % (n // 10) == 0:
+                print(str(100*(i+1)//n) + '%')
             self.reset()
-            current_role = 1
+            current_role = self.roles[0]  # =1
             # Continue until gameover
             while True:
                 # AI makes the move
@@ -187,27 +186,27 @@ class AI(Player):
         self.init_weights(env)
 
     def init_weights(self, env):
-        n_states = 3**(env.LENGTH*env.LENGTH)
-        # Initialize all states to 0.5
-        self.V = np.full(n_states, 0.5)
+        # Initialize states randomly between -0.5 and 0.5
+        self.V = np.random.random(env.n_states) - 0.5
         # Initialize end state value to winning role (0 if draw)
         for state, winner in self.generate_endgames(env):
             self.V[state] = winner
         env.reset()
 
-    # Recursive function to generate all possible final states.
-    # Result is a list of tuples, with status and winner of each final state.
-    # Used to set initial weights.
+    # Recursive function that generates all possible final states.
+    # Result is a list of tuples, with status and winner of each endgame.
+    # Note that we do not check if states are valid (it does not matter).
     def generate_endgames(self, env, i=0, j=0):
         endgames = []
-        for role in (-1, 1):
-            env.board[i,j] = role
-            if j == env.LENGTH-1:
-                if i == env.LENGTH-1:
+        #for symbol in env.symbol_map.keys():  # include endgames with empty cells
+        for symbol in env.roles:  # ignore endgames with empty cells. It works better. Why?!
+            env.board[i,j] = symbol
+            if j == env.length-1:
+                if i == env.length-1:
                     # Board complete, evaluate final state
-                    assert env.is_gameover()
-                    endgame = (self.get_state(env.board), env.winner)
-                    endgames.append(endgame)
+                    if env.is_gameover():
+                        endgame = (self.get_state(env), env.winner)
+                        endgames.append(endgame)
                 else:
                     # Next row: increase i, reset j
                     endgames += self.generate_endgames(env, i+1, j=0)
@@ -216,15 +215,18 @@ class AI(Player):
                 endgames += self.generate_endgames(env, i, j+1)
         return endgames
 
-    # Get the integer representation of board state (a base 3 number).
+    # Get the unique integer representation of board state.
+    # Uniqueness ensured by number of values.
     # Used to identify states in the weights array.
-    def get_state(self, board):
+    def get_state(self, env, board=None):
+        if board is None: board = env.board
+        base = len(env.symbol_map)
+        k = 0  # base exponent (represents the cell)
+        value_map = dict(zip(env.symbol_map.keys(), range(len(env.symbol_map))))  # cell values encoding
         result = 0
-        value_map = {0:0, -1:1, 1:2}  # base 3 encoding (for values in a cell)
-        k = 0  # base 3 exponent (different for each cell)
         for i in range(board.shape[0]):
             for j in range(board.shape[1]):
-                result += value_map[board[i,j]] * (3 ** k)
+                result += value_map[board[i,j]] * (base ** k)
                 k += 1  # change cell
         return result
 
@@ -238,14 +240,14 @@ class AI(Player):
             move = valid_moves[np.random.choice(len(valid_moves))]
         else:
             # Calculate the values of states for all valid moves (max 9 states)
-            values = np.array([self.V[self.get_state(env.simulate_move(move, role))] for move in valid_moves])
+            values = np.array([self.V[self.get_state(env, board=env.simulate_move(move, role))] for move in valid_moves])
             # If role==1 we want to maximize, otherwise to minimize
             move = valid_moves[values.argmax() if role==1 else values.argmin()]
         # Make the move
         assert env.apply_move(move, role)
 
     def observe(self, env):
-        self.history.append(self.get_state(env.board))
+        self.history.append(self.get_state(env))
 
     # Recursively update the weights based on current game history and outcome.
     def learn(self, winner):
@@ -263,8 +265,7 @@ class AI(Player):
         return self.V
 
     def set_weights(self, V, env):
-        n_states = 3**(env.LENGTH*env.LENGTH)
-        if V.shape == (n_states,):
+        if V.shape == (env.n_states,):
             self.V = V
             return True
         else:
@@ -284,14 +285,14 @@ if __name__ == '__main__':
     ai = AI(env)  # the AI needs env to initialise proper weights
 
     # Train AI by making it play multiple times against himself
-    env.train_AI(ai)
+    env.train_AI(ai, n=10000)
     # # Save weights to CSV/JSON for future use
     # V = ai.get_weights()
 
     tournament = [
         (ai, mon),  # AI against Monkey
         (ai, ai),   # AI against itself
-        (ai, hum)  # AI against Human
+        (ai, hum)   # AI against Human
     ]
     for players in tournament:
         while True:
