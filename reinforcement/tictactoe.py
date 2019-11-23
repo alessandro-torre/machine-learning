@@ -13,7 +13,7 @@ class Environment:
         self.board = np.zeros((self.length, self.length))
         self.winner = None
 
-    def print(self):
+    def print_board(self):
         print('    ', end='')
         print(*[str(i + 1) for i in range(self.length)], sep = '   ')
         for i in range(self.length):
@@ -87,7 +87,7 @@ class Environment:
         players = dict(zip(self.roles, (player1, player2)))
         # Draw board
         print(player1.name + ' against ' + player2.name)
-        self.print()
+        self.print_board()
         # Continue until gameover
         current_role = self.roles[0]  # =1
         while True:
@@ -95,7 +95,7 @@ class Environment:
             players[current_role].move(env=self, role=current_role)
             # Draw board
             print(players[current_role].name + ' moves:')
-            self.print()
+            self.print_board()
             # Check if gameover
             if self.is_gameover():
                 if learn:
@@ -286,16 +286,19 @@ if __name__ == '__main__':
     mon = Monkey()
     ai = AI(env)  # the AI needs env to initialise proper weights
 
+    # Try importing pre-trained weights, otherwise retrain.
     try:
-        ai.set_weights(np.loadtxt('V_10000.out'), env)
-        print('AI weights restored from file.')
+        filename = 'tictactoe_10000.out'
+        ai.set_weights(np.loadtxt(filename), env)
+        print('AI weights restored from ' + filename)
     except IOError:
-        print('No weights file available, AI will be trained.')
+        print(filename + ' not found, AI will be trained anew.')
         # Train AI by making it play multiple times against himself
         env.train_AI(ai, n=10000)
         # Save weights to text file for future use
-        np.savetxt('V_10000.out', ai.get_weights())
+        np.savetxt(filename, ai.get_weights())
 
+    # Play games between different players.
     tournament = [
         (ai, mon),  # AI against Monkey
         (ai, ai),   # AI against itself
