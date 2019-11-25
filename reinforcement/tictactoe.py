@@ -118,8 +118,7 @@ class Environment:
         print('Training progress:')
         for i in range(n):
             # Print simulation progress
-            if (i + 1) % (n // 10) == 0:
-                print(str(100*(i+1)//n) + '%')
+            if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
             self.reset()
             current_role = self.roles[0]  # =1
             # Continue until gameover
