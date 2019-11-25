@@ -37,17 +37,17 @@ class Environment:
                     if s2 in self.states:
                         self.possible_actions[s][a] = s2
         # Calculate transition probabilities
-        self.set_wind(wind)
+        self._set_wind(wind)
         # Current state, used when playing a game
         self.state = None
 
-    # Set state. Used when playing a game
+    # Set state
     def _set_state(self, state):
         assert state in self.active_states
         self.state = state
 
     # Set wind and recalculate transition probabilities
-    def set_wind(self, wind):
+    def _set_wind(self, wind):
         assert wind >= 0 and wind <= 1
         self._wind = wind
         self._trans_prob = dict()
@@ -59,31 +59,39 @@ class Environment:
                     self._trans_prob[s,a_target][s2] = wind_prob + \
                         ((1 - wind) if a_actual == a_target else 0)
 
+    # Set initial state and, optionally, change wind.
+    def start_game(self, initial_state, wind=None):
+        if wind is not None: self._set_wind(wind)
+        self._set_state(initial_state)
+
     # Play a game and return history of states, actions and associated rewards.
     def play_game(self, initial_state, player):
         assert isinstance(player, AI)  # TODO: define superclass Player, and class Human
-        self._set_state(initial_state)
+        self.start_game(initial_state)
         history = []
         # Repeat until a terminal state is reached
-        while True:
+        while not self.is_gameover():
             s = self.state
-            actions = self.possible_actions[s]
             a = player.move()
-            assert a in actions
-            # Update the state. In a windy grid, the new state can be random
-            if np.random.random() < self._wind:
-                # self.state = np.random.choice(list(self.possible_actions[s].values()))
-                self.state = list(actions.values())[np.random.choice(len(actions))]
-            else:
-                self.state = actions[a]
-            r = self.reward[self.state]
+            _, r = self.play_action(a)  # apply the move and update the environment
             # Update game history
             history.append((s,a,r))
-            # Stop if new state is terminal state
-            if self.state in self.terminal_states:
-                self.state = None
-                break
         return history
+
+    # Play action, update environment and return reward.
+    # Used by play_game(), and directly by fully online training methods.
+    def play_action(self, action):
+        actions = self.possible_actions[self.state]
+        assert action in actions
+        # Update the state. In a windy grid, the new state can be random
+        if np.random.random() < self._wind:
+            self.state = list(actions.values())[np.random.choice(len(actions))]
+        else:
+            self.state = actions[action]
+        return self.state, self.reward[self.state]
+
+    def is_gameover(self):
+        return self.state in self.terminal_states
 
     def print_trans_prob(self):
         print(self._print_d(self._trans_prob))
@@ -125,21 +133,43 @@ class AI:
         self.gamma = gamma  # one-period discounting factor for future rewards
         self.eps = eps  # prob to explore (epsilon-greedy strategy)
         self.delta = delta  # convergence threshold
+        self.reset()
+        # List of available training methods
+        self._train = {
+            'god'  : self._learn_god,
+            'mc'   : self._learn_mc,
+            'sarsa': self._learn_sarsa,
+            'ql'   : self._learn_ql
+        }
+        self.training_methods = list(self._train.keys())
+
+    # Reset policy, value function, and Q.
+    def reset(self):
         # Random policy initialization {state: action}
         self.policy = dict()
-        for s,actions in env.possible_actions.items():
+        for s,actions in self.env.possible_actions.items():
             self.policy[s] = np.random.choice(list(actions.keys()))
         # State values initialization {state: value}
         self.value = dict()
-        for s in env.states:
+        for s in self.env.states:
             self.value[s] = 0
         # Q function initialization {(state, action): (value, n)}
         # n is the number of observations, used to update the mean
         self.Q = dict()
-        for s,actions in env.possible_actions.items():
+        for s,actions in self.env.possible_actions.items():
             self.Q[s] = dict()
             for a in actions.keys():  # actions is a dict()
                 self.Q[s][a] = (0,0)
+
+    # Wrapper method to train the AI
+    def learn(self, method='mc', n=None):
+        assert method in self.training_methods
+        print('Starting training with method: ' + method)
+        if n is None:
+            return self._train[method]()
+        else:
+            assert type(n) is int and n > 0
+            return self._train[method](n)
 
     # Determine states value and find optimal policy assuming we are in god mode
     # ie. we know the grid's transition probabilities. This allows the agent
@@ -157,7 +187,7 @@ class AI:
     # state value, i.e. the average future reward of the state.
     # State value = the best average future reward of the state
     #             = value of the state unde the optimal policy.
-    def learn_godlike(self):
+    def _learn_god(self, _=None):
         # Repeat until convergence.
         delta_history = []
         i = 0
@@ -190,13 +220,15 @@ class AI:
                 break
         return delta_history
 
-    # Find optimal policy by playing the game multiple times.
-    # A Monte Carlo approach is used to updated the estimates of value function
-    # Q(s,a), and the optimal policy is found by maximising Q.
-    def learn(self, n=10000):
-        # Repeat until convergence
+    # Find optimal policy by playing the game multiple times and using a Monte
+    # Carlo (MC) approach to update the estimates of value function Q(s,a).
+    # The optimal policy is found by maximising Q(s,a) wrt. a
+    # This is a semi-online algorithm, since updates happen only at the end of
+    # each game, and not after each move.
+    def _learn_mc(self, n=1000):
         delta_history = []
         print('Training progress:')
+        # Repeat for n times
         for i in range(n):
             # Print simulation progress
             if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
@@ -214,36 +246,162 @@ class AI:
                 if (s,a) not in seen:
                     seen.add((s,a))
                     (q,m) = self.Q[s][a]
-                    self.Q[s][a] = ((q * m + R ) / (m + 1), m + 1)
-            # Update policy in-line, ie. after each update of Q. This saves one
+                    # Update the estimate using a (decaying) learning rate alpha=1/(m+1)
+                    self.Q[s][a] = ((q * m + R) / (m + 1), m + 1)
+            # Update policy online, ie. after each update of Q. This saves one
             # optimization loop. In principle, we should first find Q (inner
             # optimization loop), and only then update the policy. And we would
             # have an outer optimization loop to find the optimal policy. Such
             # an optimization algorithm would have very slow convergence.
             # We also update the state value function along with the policy.
-            value_change = 0
-            policy_change = False
-            for s in self.policy.keys():
-                best_a = max(self.Q[s], key=self.Q[s].get)  # find a|s s.t. v=Q[s][a] is max
-                best_v = self.Q[s][best_a][0]
-                value_change = max(value_change, np.abs(best_v - self.value[s]))
-                if best_a != self.policy[s]: policy_change = True
-                self.policy[s] = best_a
-                self.value[s] = best_v
-            # Check if we can stop learning (Nope: it stops too early with this algorithm)
-            delta_history.append(value_change)
-            # if value_change < self.delta and policy_change == False:
-            #     print('Training completed after ' + str(i + 1) \
-            #         + ' games (value change = ' + str(value_change) + ').')
-            #     break
+            delta_history.append(self._update_from_Q())
         return delta_history
 
-    # Epsilon-greedy move, used when playing a game
-    def move(self):
+    # TD0 is similar to MC, but more online, i.e. we update Q after each move,
+    # and not at the end of a game.
+    # Difference with MC: we do not calculate use total future returns R from
+    # the last game history, but we estimate (or 'bootstrap') it with the
+    # (current) next state value (the state value is the total future reward).
+    def _learn_td0(self, n=1000):
+        delta_history = []
+        print('Training progress:')
+        # Repeat for n times
+        for i in range(n):
+            # Print simulation progress
+            if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
+            s = list(self.env.active_states)[np.random.choice(len(self.env.active_states))]
+            self.env.start_game(s)
+            a = self.move()
+            # Play until gameover
+            while not self.env.is_gameover():
+                s2, r = self.env.play_action(a)
+                # Check if it is already gameover
+                if self.env.is_gameover():
+                    a2 = None
+                    next_q = 0
+                else:
+                    a2 = self.move()  # required now to update Q, but played later
+                    next_q = self.Q[s2][a2][0]
+                # Update the estimate using a (decaying) learning rate alpha=1/(m+1)
+                q, m = self.Q[s][a]
+                self.Q[s][a] = ((q * m + (r + self.gamma * next_q)) / (m + 1), m + 1)
+                # Update for next round
+                s = s2
+                a = a2
+            # Update policy and value function.
+            delta_history.append(self._update_from_Q())
+        return delta_history
+
+    # SARSA is similar to TD0, but even more online, i.e. we update the policy
+    # after each move, along with Q.
+    # In practice: we do not need to update policy and state values after each
+    # move. We can simply choose actions based on argmax(Q), instead of policy.
+    def _learn_sarsa(self, n=1000):
+        delta_history = []
+        print('Training progress:')
+        # Repeat for n times
+        for i in range(n):
+            # Print simulation progress
+            if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
+            s = list(self.env.active_states)[np.random.choice(len(self.env.active_states))]
+            self.env.start_game(s)
+            a = self.move()
+            # Play until gameover
+            while not self.env.is_gameover():
+                s2, r = self.env.play_action(a)
+                # Check if it is already gameover
+                if self.env.is_gameover():
+                    a2 = None
+                    next_q = 0
+                else:
+                    # SARSA: We select second action based on maximizing Q, instead of the policy.
+                    a2 = self._randomize(self._argmax_Q(s2))
+                    next_q = self.Q[s2][a2][0]
+                # Update the estimate using a (decaying) learning rate alpha=1/(m+1)
+                q, m = self.Q[s][a]
+                self.Q[s][a] = ((q * m + (r + self.gamma * next_q)) / (m + 1), m + 1)
+                # Update for next round
+                s = s2
+                a = a2
+                self.policy
+            # Update policy and value function. Note: we could do it at the end
+            # of the training, since we do not use the policy while training.
+            # Here we simply want to update the history of changes to value function.
+            delta_history.append(self._update_from_Q())
+        return delta_history
+
+    # Q-learning is similar to SARSA, but off-policy.
+    # We do not necessarily perform the action that we use to update Q.
+    def _learn_ql(self, n=1000):
+        delta_history = []
+        print('Training progress:')
+        # Repeat for n times
+        for i in range(n):
+            # Print simulation progress
+            if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
+            s = list(self.env.active_states)[np.random.choice(len(self.env.active_states))]
+            self.env.start_game(s)
+            a = self.move()
+            # Play until gameover
+            while not self.env.is_gameover():
+                s2, r = self.env.play_action(a)
+                # Check if it is already gameover
+                if self.env.is_gameover():
+                    a2 = None
+                    next_q = 0
+                else:
+                    # Q-learning: We select second action based on Q, and no randomization
+                    a2 = self._argmax_Q(s2)
+                    next_q = self.Q[s2][a2][0]
+                    a2 = self._randomize(a2) # Now we randomize
+                # Update the estimate using a (decaying) learning rate alpha=1/(m+1)
+                q, m = self.Q[s][a]
+                self.Q[s][a] = ((q * m + (r + self.gamma * next_q)) / (m + 1), m + 1)
+                # Update for next round
+                s = s2
+                a = a2
+                self.policy
+            # Update policy and value function. Note: we could do it at the end
+            # of the training, since we do not use the policy while training.
+            # Here we simply want to update the history of changes to value function.
+            delta_history.append(self._update_from_Q())
+        return delta_history
+
+    # Update policy and value function based on maximizing Q.
+    # Used with MC and SARSA to perform online policy optimization.
+    # Return maximum value change and boolean for tracking policy changes.
+    def _update_from_Q(self):
+        value_change = 0
+        # policy_change = False
+        for s in self.policy.keys():
+            best_a = self._argmax_Q(s)
+            best_v = self.Q[s][best_a][0]
+            value_change = max(value_change, np.abs(best_v - self.value[s]))
+            # if best_a != self.policy[s]: policy_change = True
+            self.policy[s] = best_a
+            self.value[s] = best_v
+        return value_change  # , policy_change
+
+    # Given states , return action a that maximizes Q(s,a)
+    def _argmax_Q(self, state):
+        assert state in self.env.active_states
+        return max(self.Q[state], key=self.Q[state].get)
+
+    # Select action based on policy, with epsilon-greedy random exploration.
+    def move(self, explore=True):
+        assert self.env.state in self.env.active_states
+        a = self.policy[self.env.state]
+        if explore: a = self._randomize(a)
+        return a
+
+    # Epsilon-greedy exploration strategy
+    def _randomize(self, action):
+        assert self.env.state in self.env.possible_actions
+        assert action in self.env.possible_actions[self.env.state]
         if np.random.random() < self.eps:
             return np.random.choice(list(self.env.possible_actions[self.env.state].keys()))
         else:
-            return self.policy[self.env.state]
+            return action
 
     def print_policy(self):
         for i in range(self.env.shape[0]):
@@ -303,13 +461,14 @@ if __name__ == '__main__':
     }
 
     for name,ai in ais.items():
-        print('Training AI: ' + name)
-        # plt.plot(ai.learn_godlike())
-        plt.plot(ai.learn())
-        plt.title('Convergence')
-        plt.show()
-        print('Value function:')
-        ai.print_value()
-        print('Optimal policy:')
-        ai.print_policy()
-        print()
+        print('AI: ' + name)
+        for method in ai.training_methods:
+            ai.reset()
+            plt.plot(ai.learn(method))
+            plt.title('Convergence of training method: ' + method)
+            plt.show()
+            print('Value function:')
+            ai.print_value()
+            print('Optimal policy:')
+            ai.print_policy()
+            print()
