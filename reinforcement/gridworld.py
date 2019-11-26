@@ -65,14 +65,14 @@ class Environment:
         self._set_state(initial_state)
 
     # Play a game and return history of states, actions and associated rewards.
-    def play_game(self, initial_state, player):
-        assert isinstance(player, AI)  # TODO: define superclass Player, and class Human
+    def play_game(self, initial_state, player, time=None):
+        assert isinstance(player, AI)
         self.start_game(initial_state)
         history = []
         # Repeat until a terminal state is reached
         while not self.is_gameover():
             s = self.state
-            a = player.move()
+            a = player.move(time)
             _, r = self.play_action(a)  # apply the move and update the environment
             # Update game history
             history.append((s,a,r))
@@ -116,23 +116,21 @@ class Environment:
                 r = self.reward.get((i,j), np.nan)
                 if np.isnan(r):
                     print('     |', end='')
-                elif r >= 0:
-                    print(' %.2f|' % r, end='')
                 else:
-                    print('%.2f|' % r, end='') # -ve sign takes up an extra space
+                    print('{: .2f}|'.format(r), end='')
             print()
         print('-' * 6 * self.shape[1])
 
 
 class AI:
-    def __init__(self, env, gamma=1, eps=0.1, delta=1e-5):
+    def __init__(self, env, gamma=1, eps=0.1, decaying_eps=True):
         assert isinstance(env, Environment)
         assert gamma >= 0 and gamma <= 1
         assert eps >= 0 and eps <= 1
         self.env = env  # game environment
         self.gamma = gamma  # one-period discounting factor for future rewards
         self.eps = eps  # prob to explore (epsilon-greedy strategy)
-        self.delta = delta  # convergence threshold
+        self.decaying_eps = decaying_eps # if eps decays with time
         self.reset()
         # List of available training methods
         self._train = {
@@ -153,8 +151,8 @@ class AI:
         self.value = dict()
         for s in self.env.states:
             self.value[s] = 0
-        # Q function initialization {(state, action): (value, n)}
-        # n is the number of observations, used to update the mean
+        # Q function initialization {(state, action): (value, m)}
+        # m is the number of observations, used to update the mean.
         self.Q = dict()
         for s,actions in self.env.possible_actions.items():
             self.Q[s] = dict()
@@ -186,13 +184,12 @@ class AI:
     # Optimal policy: for each state, perform the action that maximizes the
     # state value, i.e. the average future reward of the state.
     # State value = the best average future reward of the state
-    #             = value of the state unde the optimal policy.
-    def _learn_god(self, _=None):
-        # Repeat until convergence.
+    #             = value of the state under the optimal policy.
+    def _learn_god(self, n=100):
         delta_history = []
-        i = 0
-        while True:
-            i += 1
+        print('Training progress:')
+        # Repeat for n times
+        for i in range(n):
             value_change = 0
             policy_change = False
             # Loop through all active states
@@ -212,20 +209,16 @@ class AI:
                 if best_a != self.policy[s]: policy_change = True
                 self.policy[s] = best_a
                 self.value[s] = best_v
-            # Check if we can stop learning
+            # Update history
             delta_history.append(value_change)
-            if value_change < self.delta and policy_change == False:
-                print('Training completed after ' + str(i) \
-                    + ' games (value change = ' + str(value_change) + ').')
-                break
         return delta_history
 
     # Find optimal policy by playing the game multiple times and using a Monte
     # Carlo (MC) approach to update the estimates of value function Q(s,a).
-    # The optimal policy is found by maximising Q(s,a) wrt. a
+    # The optimal policy is found by maximising Q(s,a) wrt. a.
     # This is a semi-online algorithm, since updates happen only at the end of
     # each game, and not after each move.
-    def _learn_mc(self, n=1000):
+    def _learn_mc(self, n=500):
         delta_history = []
         print('Training progress:')
         # Repeat for n times
@@ -233,7 +226,7 @@ class AI:
             # Print simulation progress
             if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
             initial_state = list(self.env.active_states)[np.random.choice(len(self.env.active_states))]
-            history_r = self.env.play_game(initial_state, player=self)
+            history_r = self.env.play_game(initial_state, player=self, time=i)
             # Calculate total future reward per visited state
             R = 0
             history_R = []
@@ -257,12 +250,12 @@ class AI:
             delta_history.append(self._update_from_Q())
         return delta_history
 
-    # TD0 is similar to MC, but more online, i.e. we update Q after each move,
-    # and not at the end of a game.
-    # Difference with MC: we do not calculate use total future returns R from
-    # the last game history, but we estimate (or 'bootstrap') it with the
+    # TD(0) is similar to MC but more online, i.e. we update Q after each move,
+    # and not at the end of a game (TD = Temporal Difference).
+    # In practice: we do not calculate the total future returns R from last game
+    # history (as we did with MC), but we estimate (or 'bootstrap') it with the
     # (current) next state value (the state value is the total future reward).
-    def _learn_td0(self, n=1000):
+    def _learn_td0(self, n=500):
         delta_history = []
         print('Training progress:')
         # Repeat for n times
@@ -271,7 +264,7 @@ class AI:
             if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
             s = list(self.env.active_states)[np.random.choice(len(self.env.active_states))]
             self.env.start_game(s)
-            a = self.move()
+            a = self.move(time=i)
             # Play until gameover
             while not self.env.is_gameover():
                 s2, r = self.env.play_action(a)
@@ -288,15 +281,17 @@ class AI:
                 # Update for next round
                 s = s2
                 a = a2
-            # Update policy and value function.
+            # Update policy and value function, and update history
             delta_history.append(self._update_from_Q())
         return delta_history
 
-    # SARSA is similar to TD0, but even more online, i.e. we update the policy
-    # after each move, along with Q.
+    # SARSA is a flavor of TD(0), with the specific choice to update the policy
+    # after each move, along with Q. Note that in our implementation of TD0 we
+    # chose to update the policy after each game instead.
     # In practice: we do not need to update policy and state values after each
-    # move. We can simply choose actions based on argmax(Q), instead of policy.
-    def _learn_sarsa(self, n=1000):
+    # move. During training, we simply choose actions based on argmax(Q),
+    # and we ignore the policy. Thee policy needs to be updated at the end only.
+    def _learn_sarsa(self, n=500):
         delta_history = []
         print('Training progress:')
         # Repeat for n times
@@ -305,7 +300,7 @@ class AI:
             if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
             s = list(self.env.active_states)[np.random.choice(len(self.env.active_states))]
             self.env.start_game(s)
-            a = self.move()
+            a = self.move(time=i)
             # Play until gameover
             while not self.env.is_gameover():
                 s2, r = self.env.play_action(a)
@@ -315,24 +310,24 @@ class AI:
                     next_q = 0
                 else:
                     # SARSA: We select second action based on maximizing Q, instead of the policy.
-                    a2 = self._randomize(self._argmax_Q(s2))
+                    a2 = self._randomize(self._argmax_Q(s2), time=i)
                     next_q = self.Q[s2][a2][0]
-                # Update the estimate using a (decaying) learning rate alpha=1/(m+1)
+                # Update the estimate using (decaying) learning rate alpha=1/(m+1)
                 q, m = self.Q[s][a]
                 self.Q[s][a] = ((q * m + (r + self.gamma * next_q)) / (m + 1), m + 1)
                 # Update for next round
                 s = s2
                 a = a2
-                self.policy
             # Update policy and value function. Note: we could do it at the end
             # of the training, since we do not use the policy while training.
-            # Here we simply want to update the history of changes to value function.
+            # Here we simply want to update the training history.
             delta_history.append(self._update_from_Q())
         return delta_history
 
-    # Q-learning is similar to SARSA, but off-policy.
-    # We do not necessarily perform the action that we use to update Q.
-    def _learn_ql(self, n=1000):
+    # Q-learning is another flavor of TD(0). Similar to SARSA, but off-policy,
+    # which means that we do not (necessarily) perform the action that we use
+    # to update Q.
+    def _learn_ql(self, n=500):
         delta_history = []
         print('Training progress:')
         # Repeat for n times
@@ -341,7 +336,7 @@ class AI:
             if (i + 1) % (n // 10) == 0: print(str(100 * (i + 1) // n) + '%')
             s = list(self.env.active_states)[np.random.choice(len(self.env.active_states))]
             self.env.start_game(s)
-            a = self.move()
+            a = self.move(time=i)
             # Play until gameover
             while not self.env.is_gameover():
                 s2, r = self.env.play_action(a)
@@ -350,17 +345,17 @@ class AI:
                     a2 = None
                     next_q = 0
                 else:
-                    # Q-learning: We select second action based on Q, and no randomization
+                    # Q-learning: We select second action based on Q, but no randomization
                     a2 = self._argmax_Q(s2)
-                    next_q = self.Q[s2][a2][0]
-                    a2 = self._randomize(a2) # Now we randomize
+                    next_q = self.Q[s2][a2][0]  # based exactly on argmax(Q)
+                    #a2 = self._randomize(a2, time=i)  # Now we randomize epsilon-greedy
+                    a2 = np.random.choice(list(self.env.possible_actions[s2].keys()))  # Next action is totally random
                 # Update the estimate using a (decaying) learning rate alpha=1/(m+1)
                 q, m = self.Q[s][a]
                 self.Q[s][a] = ((q * m + (r + self.gamma * next_q)) / (m + 1), m + 1)
                 # Update for next round
                 s = s2
                 a = a2
-                self.policy
             # Update policy and value function. Note: we could do it at the end
             # of the training, since we do not use the policy while training.
             # Here we simply want to update the history of changes to value function.
@@ -388,17 +383,19 @@ class AI:
         return max(self.Q[state], key=self.Q[state].get)
 
     # Select action based on policy, with epsilon-greedy random exploration.
-    def move(self, explore=True):
+    def move(self, time=None, explore=True):
         assert self.env.state in self.env.active_states
         a = self.policy[self.env.state]
-        if explore: a = self._randomize(a)
+        if explore: a = self._randomize(a, time)
         return a
 
     # Epsilon-greedy exploration strategy
-    def _randomize(self, action):
+    def _randomize(self, action, time=None):
         assert self.env.state in self.env.possible_actions
         assert action in self.env.possible_actions[self.env.state]
-        if np.random.random() < self.eps:
+        eps = self.eps
+        if self.decaying_eps and time is not None: eps /= (time + 1)
+        if np.random.random() < eps:
             return np.random.choice(list(self.env.possible_actions[self.env.state].keys()))
         else:
             return action
@@ -421,10 +418,23 @@ class AI:
                 v = self.value.get((i,j), np.nan)
                 if np.isnan(v):
                     print('     |', end='')
-                elif v >= 0:
-                    print(' %.2f|' % v, end='')
                 else:
-                    print('%.2f|' % v, end='')
+                    print('{: .2f}|'.format(v), end='')
+            print()
+        print('-' * 6 * self.env.shape[1])
+
+    def print_observations(self):
+        for i in range(self.env.shape[0]):
+            print('-' * 6 * self.env.shape[1])
+            for j in range(self.env.shape[1]):
+                s = (i,j)
+                m = 0
+                if s in self.env.active_states:
+                    for a in self.Q[s].keys():
+                        m += self.Q[s][a][1]
+                    print(' {:>3d} |'.format(m), end='')
+                else:
+                    print('     |'.format(m), end='')
             print()
         print('-' * 6 * self.env.shape[1])
 
@@ -469,6 +479,8 @@ if __name__ == '__main__':
             plt.show()
             print('Value function:')
             ai.print_value()
+            print('Observations:')
+            ai.print_observations()
             print('Optimal policy:')
             ai.print_policy()
             print()
