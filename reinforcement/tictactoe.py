@@ -286,16 +286,17 @@ if __name__ == '__main__':
     ai = AI(env)  # the AI needs env to initialise proper weights
 
     # Try importing pre-trained weights, otherwise retrain.
+    EPOCHS = 10000
     try:
-        filename = 'tictactoe_10000.out'
-        ai.set_weights(np.loadtxt(filename), env)
-        print('AI weights restored from ' + filename)
+        filepath = 'models/tictactoe_' + str(EPOCHS) + '.out'
+        ai.set_weights(np.loadtxt(filepath), env)
+        print('AI weights restored from ' + filepath)
     except IOError:
-        print(filename + ' not found, AI will be trained anew.')
+        print(filepath + ' not found, AI will be trained.')
         # Train AI by making it play multiple times against himself
-        env.train_AI(ai, n=10000)
+        env.train_AI(ai, n=EPOCHS)
         # Save weights to text file for future use
-        np.savetxt(filename, ai.get_weights())
+        np.savetxt(filepath, ai.get_weights())
 
     # Play games between different players.
     tournament = [
