@@ -1,8 +1,6 @@
 # Reference: Practical Deep Reinforcement Learning Approach for Stock Trading.
 # https://arxiv.org/abs/1811.07522
 
-#TODO: save and load weights
-
 import numpy as np
 import pandas as pd
 import itertools
@@ -113,7 +111,6 @@ class MultiStockEnv:
     self.cash = self.initial_investment
     self.stock = np.zeros(self._n_stocks)
     self.price = self._history_prices[self.t]
-    self.value = self._get_value()
     return self._get_state()
 
   def _get_value(self):
@@ -121,6 +118,20 @@ class MultiStockEnv:
 
   # Perform the action an the beginning of current time period, then move up in time.
   def step(self, action):
+    prev_value = self._get_value()
+    # Trade to execute the action.
+    self._trade(action)
+    # assert self._get_value() == prev_value  # Check portfolio value conservation
+    # Move to next time period
+    self.t += 1
+    self.price = self._history_prices[self.t]
+    self.done = self.t == self._t_max
+    # Get reward and new state
+    reward = self._get_value() - prev_value
+    state = self._get_state()
+    return state, reward
+
+  def _trade(self, action):
     # Transform action index in the action space to action vector in the action list.
     assert action in self.action_space
     action = self._action_list[action]
@@ -144,16 +155,6 @@ class MultiStockEnv:
           self.stock[i] += 1
         else:
           buy_idx.remove(i)
-    # Move to next time period
-    self.t += 1
-    self.price = self._history_prices[self.t]
-    self.done = self.t == self._t_max
-    # Calculate the reward
-    previous_value = self.value
-    self.value = self._get_value()
-    reward = self.value - previous_value
-    state = self._get_state()
-    return state, reward
 
   # Feed data to agent until done and return the history of reward per time step.
   def sim(self, agent, training_mode=False):
@@ -190,7 +191,7 @@ class MultiStockEnv:
 
 class QNAgent:
   ''' (Non-deep) Q Network Agent, using Q Reinforcement Learning and no hidden layers.'''
-  def __init__(self, state_size, action_space, gamma=0.95, eps=1.0, eps_min=0.1, eps_decay=0.995):
+  def __init__(self, state_size, action_space, gamma=0.95, eps=1.0, eps_min=0.01, eps_decay=0.995):
     self.state_size = state_size  # number of variables to describe the state
     self.action_space = action_space  # possible actions
     self.model = LinearModel(state_size, len(action_space))  # regression model used for Q-learning
@@ -246,7 +247,7 @@ class QNAgent:
 
   def save(self, filepath):
     np.savez(filepath, W=self.model._W, b=self.model._b, \
-      mean=self.scaler._mean, std=self.scaler._std)
+      mean=self.scaler._mean, std=self.scaler._std, eps=self.eps)
 
   def load(self, filepath):
     npz = np.load(filepath)
@@ -254,6 +255,7 @@ class QNAgent:
     self.model._b = npz['b']
     self.scaler._mean = npz['mean']
     self.scaler._std = npz['std']
+    self.eps = npz['eps']
 
 
 
@@ -277,12 +279,15 @@ if __name__ == '__main__':
   env = MultiStockEnv(train_data, initial_investment)
   agent = QNAgent(env.state_size, env.action_space)
 
-  # Try importing pre-trained weights, otherwise retrain.
+  # Try importing pre-trained weights, otherwise train.
   EPOCHS = 2000
   try:
     filepath = 'models/trader_' + str(EPOCHS) + '.npz'
+    filepath2 = 'models/trader_returns/returns_train_' + str(EPOCHS) + '.npy'
     agent.load(filepath)
     print('AI weights restored from ' + filepath)
+    train_history = np.load(filepath2)
+    print('Train returns restored from ' + filepath2)
   except IOError:
     print(filepath + ' not found, AI will be trained.')
     # Fit the scaler to the data
@@ -291,26 +296,56 @@ if __name__ == '__main__':
     train_history = list()  # to store total returns after each sim
     t0 = datetime.now()
     for i in range(EPOCHS):
-      rewards = env.sim(agent, training_mode=True)
-      total_return = rewards.sum()
-      train_history.append(total_return)
+      portfolio_return = env.sim(agent, training_mode=True).sum()
+      train_history.append(portfolio_return)
       if i % max(1, int(EPOCHS/100)) == 0:
-        print(f'Training step {i+1}: total return {total_return:.2f}')
+        print(f'Training step {i+1}: total return {portfolio_return:.2f}')
     dt = datetime.now() - t0
     print(f'Total training time: {dt} seconds.')
-    # Save model weights and scaler parameters to file
+    # Save agent parameters (model weights and scaler parameters) to file
     agent.save(filepath)
+    # Save train history of portfolio returns to file
+    train_history = np.array(train_history)
+    np.save(filepath2, train_history)
     # Plot model losses
-    plt.plot(agent.model.losses)
-    plt.show()
-    # Plot total portfolio returns
-    plt.plot(train_history)
-    plt.show()
+    # plt.plot(agent.model.losses)
+    # plt.title('Training losses')
+    # plt.show()
 
   # Test agent on test_data, and compare performance with benchmark.
+  # Note that we are considering returns here, in exceedance of initial_investment.
   env = MultiStockEnv(test_data, initial_investment)
   return_ai = np.cumsum(env.sim(agent, training_mode=False))
   benchmark = np.cumsum(env.get_average_return())
-  history = pd.DataFrame({'agent': return_ai, 'benchmark': benchmark})
-  history.plot()
+
+  # Portfolio return on test data with some random action
+  # Try import test returns, otherwise calculate
+  try:
+    filepath3 = 'models/trader_returns/returns_test_' + str(EPOCHS) + '.npy'
+    test_history = np.load(filepath3)
+    print('Test returns restored from ' + filepath3)
+  except IOError:
+    print(filepath3 + ' not found, calculate return on test data.')
+    test_history = list()
+    for i in range(EPOCHS):
+      portfolio_return = env.sim(agent, training_mode=True).sum()
+      test_history.append(portfolio_return)
+      if i % max(1, int(EPOCHS/100)) == 0:
+        print(f'Test step {i+1}: total return {portfolio_return:.2f}')
+    # Save train history of portfolio returns to file
+    test_history = np.array(test_history)
+    np.save(filepath3, test_history)
+
+  # Plot
+  df = pd.DataFrame({'agent': return_ai, 'benchmark': benchmark})
+  df.plot()
+  plt.title('Portfolio return over time, test data (without random exploration).')
+  plt.show()
+  print(f"Average train return: {train_history.mean():.2f}, min: {train_history.min():.2f}, max: {train_history.max():.2f}")
+  plt.hist(train_history, bins=20)
+  plt.title('Portfolio returns during training')
+  plt.show()
+  print(f"Average test return: {test_history.mean():.2f}, min: {test_history.min():.2f}, max: {test_history.max():.2f}")
+  plt.hist(test_history, bins=20)
+  plt.title('Portfolio returns for test data (with random exploration)')
   plt.show()
