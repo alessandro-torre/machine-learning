@@ -1,8 +1,9 @@
 *.pyc
 *.ipynb_checkpoints
-
 *.idea
 *.spyproject
+
 large_data/
 supervised_deep_2/out/
 unsupervised_deep/tb/
+tensorflow2/gan_images/
