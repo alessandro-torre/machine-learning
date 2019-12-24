@@ -2,7 +2,7 @@ import numpy as np
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.datasets import load_breast_cancer
-from lib.svc import LinearSVC
+from lib.svm import LinearSVC
 
 try:
   import matplotlib.pyplot as plt

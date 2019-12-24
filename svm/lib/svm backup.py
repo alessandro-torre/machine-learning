@@ -26,11 +26,12 @@ class LinearSVC:
 
   def _build(self, x_shape):
     self.w = np.random.randn(x_shape[1])
-    self.b = 0
+    self.b = np.array(0.)
     self._built = True
 
-  def fit(self, X, Y, learning_rate=1e-5, epochs=1000):
-    assert len(X) == len(Y), "Length of x and y do not match"
+  def fit(self, X, Y, learning_rate=1e-5, momentum=0.99, epochs=1000):
+    assert len(X) == len(Y), "Length of x and y do not match."
+    assert momentum >= 0, "Momentum must be non-negative."
 
     # Encode classes to {-1, +1}
     cls = set(Y)
@@ -51,10 +52,13 @@ class LinearSVC:
 
     # Gradient descent
     losses = []
+    self.vw, self.vb = 0, 0
     for epoch in range(epochs):
       losses.append(np.mean(self._loss_function(x, y)))
-      self.w += - learning_rate * self._dloss_dw(x, y)
-      self.b += - learning_rate * self._dloss_db(x, y)
+      self.vw = momentum * self.vw + self._dloss_dw(x, y)
+      self.vb = momentum * self.vb + self._dloss_db(x, y)
+      self.w -= learning_rate * self.vw
+      self.b -= learning_rate * self.vb
 
     self._fitted = True
     self.support_ = np.where(y * self._decision_function(x) <= 1)[0]
@@ -97,7 +101,8 @@ class LinearSVC:
     Y_hat = self.predict(X)
     return np.mean(Y == Y_hat)
 
-  def plot_decision_boundary(self, X, Y, resolution=100, colors=('b', 'k', 'r')):
+  def plot_decision_boundary(self, X, Y, resolution=100, colors=('b', 'k', 'r'),
+                            title=None):
     assert X.shape[1] == 2, "Method available for 2D input data only."
 
     # Normalize X and encode Y
@@ -138,4 +143,5 @@ class LinearSVC:
     # margin_n = -(1 + w[0]*x_axis + b)/w[1]
     # plt.plot(x_axis, margin_n, color='orange')
 
+    if title: ax.set_title(title)
     plt.show()

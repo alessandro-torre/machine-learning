@@ -1,7 +1,7 @@
 import numpy as np
 from datetime import datetime
 from sklearn.model_selection import train_test_split
-from lib.svm import LinearSVC
+from lib.svm import SVC
 
 try:
   import matplotlib.pyplot as plt
@@ -24,11 +24,11 @@ plt.show()
 
 
 # Train without momentum
-model1 = LinearSVC()
+model1 = SVC('linear')
 
 # We save the initial weights to reuse with the model below
 model1._build(X_train.shape)
-w_init, b_init = model1.w.copy(), model1.b.copy()
+alpha_init = model1.alpha.copy()
 model1._built = True
 
 t0 = datetime.now()
@@ -38,16 +38,14 @@ print(f"Training time: {datetime.now() - t0}")
 print(f"Train accuracy: {model1.score(X_train, Y_train):.2f}")
 print(f"Test  accuracy: {model1.score(X_test, Y_test):.2f}")
 print(f"Number of support vectors: {len(model1.support_)}")
-print(f"Coefficients w:\n{model1.w}")
-print(f"Intercept b: {model1.b:.2f}")
 
 
 # Train with momentum
-model2 = LinearSVC()
+model2 = SVC('linear')
 
 # For a proper comparison, we use the same initial weights
 model2._build(X_train.shape)
-model2.w, model2.b = w_init.copy(), b_init.copy()
+model2.alpha = alpha_init.copy()
 model2._built = True
 
 t0 = datetime.now()
@@ -57,8 +55,6 @@ print(f"Training time: {datetime.now() - t0}")
 print(f"Train accuracy: {model2.score(X_train, Y_train):.2f}")
 print(f"Test  accuracy: {model2.score(X_test, Y_test):.2f}")
 print(f"Number of support vectors: {len(model2.support_)}")
-print(f"Coefficients w:\n{model2.w}")
-print(f"Intercept b: {model2.b:.2f}")
 
 
 plt.plot(losses1, label="w/o momentum")
