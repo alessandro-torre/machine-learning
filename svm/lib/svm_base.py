@@ -9,29 +9,24 @@ except ImportError:
 
 
 
-class LinearSVC:
+class AbstractSVC:
   def __init__(self, C=1.0, normalize=True):
     assert C >= 0, "C must be non-negative."
     self.C = C
     self.normalize = normalize
     self._built = False
     self._fitted = False
-    self.w = None
-    self.b = None
     self.scaler = StandardScaler()
     self._encode_class = dict()  # to convert classes to signs
     self._decode_class = dict()  # to convert signs to classes
     self.support_ = None  # data points that violate the margins
     self.support_vectors_ = None
 
-  def _build(self, x_shape):
-    self.w = np.random.randn(x_shape[1])
-    self.b = np.array(0.)
-    self._built = True
-
-  def fit(self, X, Y, learning_rate=1e-5, momentum=0.99, epochs=1000):
+  def preprocess(self, X, Y):
+    '''
+      Normalize features vector X, and encode classes to {-1, +1}.
+    '''
     assert len(X) == len(Y), "Length of x and y do not match."
-    assert momentum >= 0, "Momentum must be non-negative."
 
     # Encode classes to {-1, +1}
     cls = set(Y)
@@ -47,43 +42,42 @@ class LinearSVC:
     else:
       x = X
 
-    # Initalize weights
-    if not self._built: self._build(x.shape)
+    return x, y
 
-    # Gradient descent
+  def _build(self, x_shape):
+    ''' Initialize weights. '''
+    raise NotImplementedError
+
+  def fit(self, X, Y, learning_rate=1e-5, momentum=0.99, epochs=1000):
+    '''
+      Method to fit the model on the training set.
+    '''
+    x, y = self.preprocess(X, Y)
+    if not self._built:
+      self._build(x.shape)
+      self._built = True
+
+    # Gradient ascent / descent
+    assert learning_rate > 0, "Learning rate must be positive."
+    assert momentum >= 0, "Momentum must be non-negative."
+    assert epochs > 0, "Epochs must be positive."
     losses = []
-    self.vw, self.vb = 0, 0
     for epoch in range(epochs):
-      losses.append(np.mean(self._loss_function(x, y)))
-      self.vw = momentum * self.vw + self._dloss_dw(x, y)
-      self.vb = momentum * self.vb + self._dloss_db(x, y)
-      self.w -= learning_rate * self.vw
-      self.b -= learning_rate * self.vb
+      done = (epoch + 1 == epochs)
+      losses.append(self._backprop(x, y, learning_rate, momentum, done))
 
     self._fitted = True
-    self.support_ = np.where(y * self._decision_function(x) <= 1)[0]
+    self.support_ = np.where(y * self._forward_step(x) <= 1)[0]
     self.support_vectors_ = X[self.support_]
     return losses
 
-  def _decision_function(self, x):
-    return x.dot(self.w) + self.b
+  def _backprop(self, x, y, learning_rate, momentum, done):
+    ''' Do one step of gradient backpropagation to update model weights. '''
+    raise NotImplementedError
 
-  def _loss_function(self, x, y):
-    distance = 0.5 * self.w * self.w
-    penalty = np.sum(np.maximum(0, 1 - y * self._decision_function(x)))
-    return distance + self.C * penalty
-
-  def _dloss_dw(self, x, y):
-    ddistance_dw = self.w
-    penalty_idx = np.where(y * self._decision_function(x) < 1)[0]
-    dpenalty_dw = - y[penalty_idx].dot(x[penalty_idx])
-    return ddistance_dw + self.C * dpenalty_dw
-
-  def _dloss_db(self, x, y):
-    ddistance_db = 0
-    penalty_idx = np.where(y * self._decision_function(x) < 1)[0]
-    dpenalty_db = - y[penalty_idx].sum()
-    return ddistance_db + self.C * dpenalty_db
+  def _forward_step(self, x):
+    ''' Do one forward step. '''
+    raise NotImplementedError
 
   def predict(self, X):
     assert self._fitted, "This SVC instance is not fitted yet. " + \
@@ -93,8 +87,7 @@ class LinearSVC:
       x = self.scaler.transform(X)
     else:
       x = X
-
-    y = np.sign(self._decision_function(x))
+    y = np.sign(self._forward_step(x))
     return np.array(list(map(self._decode_class.get, y)))
 
   def score(self, X, Y):
@@ -116,7 +109,7 @@ class LinearSVC:
     # and evaluate the model over the entire space
     x_range = np.linspace(X[:,0].min(), X[:,0].max(), resolution)
     y_range = np.linspace(X[:,1].min(), X[:,1].max(), resolution)
-    grid = [[self._decision_function(np.array([[xr, yr]])) for yr in y_range] for xr in x_range]
+    grid = [[self._forward_step(np.array([[xr, yr]])) for yr in y_range] for xr in x_range]
     grid = np.array(grid).reshape(len(x_range), len(y_range))
 
     # Plot decision contours using grid and make a scatter plot of training data
@@ -143,5 +136,6 @@ class LinearSVC:
     # margin_n = -(1 + w[0]*x_axis + b)/w[1]
     # plt.plot(x_axis, margin_n, color='orange')
 
-    if title: ax.set_title(title)
+    if title is None: title = self.name
+    ax.set_title(title)
     plt.show()

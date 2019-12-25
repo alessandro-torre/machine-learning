@@ -1,7 +1,7 @@
 import numpy as np
 from datetime import datetime
 from sklearn.model_selection import train_test_split
-from lib.svm import SVC
+from lib.svm_dual import SVC
 
 try:
   import matplotlib.pyplot as plt
